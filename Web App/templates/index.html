@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>ESP32 Database Viewer</title>
+</head>
+<body>
+    <h1>ESP32 RFID Attendance System</h1>
+
+    <!-- ADD MEMBER FORM -->
+    <h2>Add New Member</h2>
+    <form action="/add_member" method="POST">
+        <label>Name:</label>
+        <input type="text" name="name" required>
+        <label>RFID (e.g., A4 B2 C3 D4):</label>
+        <input type="text" name="rfid" required>
+        <button type="submit">Save to SD Card</button>
+    </form>
+
+    <hr>
+
+    <!-- MEMBERS TABLE -->
+    <h2>Registered Members</h2>
+    <table border="1">
+        <tr><th>ID</th><th>Name</th><th>RFID</th></tr>
+        {% for member in members %}
+        <tr>
+            <td>{{ member.member_id }}</td>
+            <td>{{ member.name }}</td>
+            <td>{{ member.rfid }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+
+    <hr>
+
+    <!-- LOGS TABLE -->
+    <h2>Recent Scans (Logs)</h2>
+    <table border="1">
+        <tr><th>Log ID</th><th>RFID (Door ID)</th><th>Time</th></tr>
+        {% for log in logs %}
+        <tr>
+            <td>{{ log.log_id }}</td>
+            <td>{{ log.door_id }}</td>
+            <td>{{ log.time }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+</body>
+</html>
