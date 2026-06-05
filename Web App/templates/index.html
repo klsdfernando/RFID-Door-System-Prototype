@@ -2,48 +2,153 @@
 <html>
 <head>
     <title>ESP32 Database Viewer</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 30px; background-color: #f9f9f9; }
+        .header-container { display: flex; justify-content: space-between; align-items: center; }
+        table { border-collapse: collapse; width: 100%; margin-bottom: 30px; background-color: white; }
+        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        .danger-zone { border: 2px solid red; padding: 20px; background-color: #ffe6e6; margin-top: 40px; border-radius: 5px; }
+        .btn { padding: 8px 15px; cursor: pointer; border: none; border-radius: 4px; }
+        .btn-red { background-color: #ff4d4d; color: white; }
+        .btn-darkred { background-color: #cc0000; color: white; font-weight: bold; font-size: 16px; padding: 12px 20px; }
+        .btn-green { background-color: #4CAF50; color: white; }
+        .refresh-control { background: #e0e0e0; padding: 10px 15px; border-radius: 5px; font-weight: bold; }
+        .refresh-control select { padding: 5px; font-size: 14px; margin-left: 10px; }
+    </style>
 </head>
 <body>
-    <h1>ESP32 RFID Attendance System</h1>
+    <div class="header-container">
+        <h1>ESP32 RFID Attendance System</h1>
+        
+        <div class="refresh-control">
+            <label for="refreshSelect">Auto-Refresh:</label>
+            <select id="refreshSelect" onchange="updateRefresh()">
+                <option value="0">Off</option>
+                <option value="3">3 Seconds</option>
+                <option value="5">5 Seconds</option>
+                <option value="10">10 Seconds</option>
+                <option value="30">30 Seconds</option>
+            </select>
+        </div>
+    </div>
 
-    <!-- ADD MEMBER FORM -->
     <h2>Add New Member</h2>
-    <form action="/add_member" method="POST">
+    <form action="/add_member" method="POST" style="background: white; padding: 20px; border: 1px solid #ddd; border-radius: 5px;">
+        <label>Student ID (e.g., XX/20XX/XXX):</label>
+        <input type="text" name="member_id" required style="margin-right: 15px; padding: 5px;">
         <label>Name:</label>
-        <input type="text" name="name" required>
-        <label>RFID (e.g., A4 B2 C3 D4):</label>
-        <input type="text" name="rfid" required>
-        <button type="submit">Save to SD Card</button>
+        <input type="text" name="name" required style="margin-right: 15px; padding: 5px;">
+        <label>RFID UID:</label>
+        <input type="text" name="rfid" required style="margin-right: 15px; padding: 5px;">
+        <button type="submit" class="btn btn-green">Save to SD Card</button>
     </form>
 
-    <hr>
+    <hr style="margin: 30px 0;">
 
-    <!-- MEMBERS TABLE -->
     <h2>Registered Members</h2>
-    <table border="1">
-        <tr><th>ID</th><th>Name</th><th>RFID</th></tr>
-        {% for member in members %}
-        <tr>
-            <td>{{ member.member_id }}</td>
-            <td>{{ member.name }}</td>
-            <td>{{ member.rfid }}</td>
-        </tr>
-        {% endfor %}
+    <table>
+        <thead>
+            <tr><th>Student ID</th><th>Name</th><th>RFID UID</th><th>Action</th></tr>
+        </thead>
+        <tbody id="membersTableBody">
+            {% for member in members %}
+            <tr>
+                <td>{{ member.member_id }}</td>
+                <td>{{ member.name }}</td>
+                <td>{{ member.rfid }}</td>
+                <td>
+                    <form action="/delete_member" method="POST" style="margin: 0;">
+                        <input type="hidden" name="member_id" value="{{ member.member_id }}">
+                        <button type="submit" class="btn btn-red">Delete</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
     </table>
 
-    <hr>
-
-    <!-- LOGS TABLE -->
     <h2>Recent Scans (Logs)</h2>
-    <table border="1">
-        <tr><th>Log ID</th><th>RFID (Door ID)</th><th>Time</th></tr>
-        {% for log in logs %}
-        <tr>
-            <td>{{ log.log_id }}</td>
-            <td>{{ log.door_id }}</td>
-            <td>{{ log.time }}</td>
-        </tr>
-        {% endfor %}
+    <table>
+        <thead>
+            <tr><th>Member ID / Raw RFID</th><th>Time</th></tr>
+        </thead>
+        <tbody id="logsTableBody">
+            {% for log in logs %}
+            <tr>
+                <td>{{ log.member_id }}</td>
+                <td>{{ log.time }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
     </table>
+
+    <div class="danger-zone">
+        <h3 style="color: red; margin-top: 0;">Danger Zone</h3>
+        <p>Clicking this button will completely wipe the database tables on the SD card... <strong>All registered members and scan history will be permanently deleted.</strong></p>
+        <form action="/reset_db" method="POST" onsubmit="return confirm('Are you SURE you want to wipe the database? This cannot be undone!');">
+            <button type="submit" class="btn btn-darkred">FACTORY RESET DATABASE</button>
+        </form>
+    </div>
+
+    <script>
+        let refreshTimer;
+
+        function fetchAndUpdateTables() {
+            fetch('/api/data')
+                .then(response => response.json())
+                .then(data => {
+                    let membersHTML = '';
+                    data.members.forEach(member => {
+                        membersHTML += `
+                            <tr>
+                                <td>${member.member_id}</td>
+                                <td>${member.name}</td>
+                                <td>${member.rfid}</td>
+                                <td>
+                                    <form action="/delete_member" method="POST" style="margin: 0;">
+                                        <input type="hidden" name="member_id" value="${member.member_id}">
+                                        <button type="submit" class="btn btn-red">Delete</button>
+                                    </form>
+                                </td>
+                            </tr>
+                        `;
+                    });
+                    document.getElementById('membersTableBody').innerHTML = membersHTML;
+
+                    let logsHTML = '';
+                    data.logs.forEach(log => {
+                        logsHTML += `
+                            <tr>
+                                <td>${log.member_id}</td>
+                                <td>${log.time}</td>
+                            </tr>
+                        `;
+                    });
+                    document.getElementById('logsTableBody').innerHTML = logsHTML;
+                })
+                .catch(error => console.error('Error fetching data:', error));
+        }
+
+        function updateRefresh() {
+            const select = document.getElementById('refreshSelect');
+            const seconds = select.value;
+            localStorage.setItem('autoRefreshInterval', seconds);
+            applyRefresh(seconds);
+        }
+
+        function applyRefresh(seconds) {
+            clearInterval(refreshTimer); 
+            if (seconds > 0) {
+                refreshTimer = setInterval(fetchAndUpdateTables, seconds * 1000);
+            }
+        }
+
+        window.onload = function() {
+            const savedInterval = localStorage.getItem('autoRefreshInterval') || "0";
+            document.getElementById('refreshSelect').value = savedInterval;
+            applyRefresh(savedInterval);
+        };
+    </script>
 </body>
 </html>
